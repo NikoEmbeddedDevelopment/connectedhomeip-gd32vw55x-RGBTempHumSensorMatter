@@ -1,0 +1,836 @@
+# Copyright (c) 2021 Project CHIP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/chip.gni")
+
+
+import("${chip_root}/build/config/compiler/compiler.gni") ####
+
+
+import("//build_overrides/gd32vw55x.gni")
+import("//build_overrides/mbedtls.gni")
+import("${chip_root}/src/lib/lib.gni")
+import("${chip_root}/src/platform/device.gni")
+import("gd32vw55x_board.gni")
+
+
+assert(gd32vw55x_sdk_root != "", "gd32vw55x_sdk_root must be specified")
+
+declare_args() {
+  gd32vw55x_wpas_lib = true
+  gd32vw55x_mbedtls_sw = true
+}
+
+# Defines an gd32vw55x SDK build target.
+#
+# Parameters:
+#   sources - The sources files to build.
+#
+template("gd32vw55x_sdk") {
+  if (defined(invoker.gd32vw55x_sdk_root)) {
+    gd32vw55x_sdk_root = invoker.gd32vw55x_sdk_root
+  }
+
+  assert(gd32vw55x_sdk_root != "", "gd32vw55x_sdk_root must be specified")
+
+  if (defined(invoker.gd32vw55x_project_dir)) {
+    gd32vw55x_project_dir = invoker.gd32vw55x_project_dir
+  }
+
+  if (defined(invoker.chip_enable_ota_requestor)) {
+    if (invoker.chip_enable_ota_requestor) {
+      chip_enable_ota_requestor = true
+    }
+  }
+
+  sdk_target_name = target_name
+
+  # While most gd32vw55x sdk includes come from the gd32vw55x_sdk_config config (in
+  # BUILD.gn), this template gets instantiated by each project each of which
+  # provides a few extra includes/defines. Handle those here.
+  # config("project_configs") {
+  config("${sdk_target_name}_config") {
+    include_dirs = []
+    _include_dirs = []
+    defines = []
+    libs = []
+    cflags = []
+    cflags_cc = []
+    asmflags = []
+    ldflags = []
+    libs = []
+
+    if (defined(invoker.include_dirs)) {
+      include_dirs += invoker.include_dirs
+    }
+    include_dirs += [ "${gd32vw55x_project_dir}/include" ]
+
+    if (defined(invoker.defines)) {
+      defines += invoker.defines
+    }
+
+
+    # Treat these includes as system includes, so warnings in them are not fatal.
+    _include_dirs += [
+      # firmware inc
+      "${gd32vw55x_sdk_root}/MSDK/plf/inc",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Include",
+      "${gd32vw55x_sdk_root}/MSDK/plf/Utilities",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/arch",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/arch/boot",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/arch/ll",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/compiler",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/gd32vw55x",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/NMSIS/Core/Include",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/NMSIS/DSP/Include",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/NMSIS/DSP/Include/dsp",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/reg",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/crm",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/phy",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/intc/risc-v",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/extint",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/sysctrl",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/ipc_fhost",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/dma",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/la",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/time",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/button",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/led",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/uart",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/nvds",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/rf",
+      
+      # LCD driver
+      "${gd32vw55x_sdk_root}/MSDK/lcd/Soft_Drive",
+      
+      # MACSW
+      "${gd32vw55x_sdk_root}/MSDK/macsw/import",
+      "${gd32vw55x_sdk_root}/MSDK/macsw/config",
+      "${gd32vw55x_sdk_root}/MSDK/macsw/export",
+
+      # RTOS
+      "${gd32vw55x_sdk_root}/MSDK/rtos/rtos_wrapper",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/rtos_mgmt",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/include",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS_port",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS_port/riscv32",
+      
+      # LWIP
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/include",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/include/compat/posix",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/port",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/port/arch",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/iperf",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/iperf3",
+
+      # ROM-EXPORT
+      "${gd32vw55x_sdk_root}/ROM-EXPORT/bootloader",
+      "${gd32vw55x_sdk_root}/ROM-EXPORT/halcomm",
+      "${gd32vw55x_sdk_root}/ROM-EXPORT/symbol",
+
+      "${gd32vw55x_sdk_root}/config",
+      "${gd32vw55x_sdk_root}/MSDK/app",
+
+      # BLE
+      "${gd32vw55x_sdk_root}/MSDK/blesw/src/export/config",
+      "${gd32vw55x_sdk_root}/MSDK/blesw/src/export",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/dis",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/glp",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/hps",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/ias",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/lls",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/prox",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/sample",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/tps",
+      "${gd32vw55x_sdk_root}/MSDK/util/include",
+
+      # zcbor
+      "${gd32vw55x_sdk_root}/MSDK/Third_Party/zcbor-0.6.0/include",
+    ]
+
+    #mbedtls
+    if(gd32vw55x_mbedtls_sw) {
+        _include_dirs += [
+          #MBEDTLS v2.26.0
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/include",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls_config",
+        ]
+    } else {
+        _include_dirs += [
+          #MBEDTLS v2.17.0-ssl
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/include",
+          #MBEDTLS v2.17.0-rom
+          "${gd32vw55x_sdk_root}/ROM-EXPORT/mbedtls-2.17.0-rom/include",
+        ]
+    }
+
+    if(gd32vw55x_wpas_lib) {
+        _include_dirs += [
+          #wifi manager
+          "${gd32vw55x_sdk_root}/MSDK/wifi_manager",
+          "${gd32vw55x_sdk_root}/MSDK/wifi_manager/wpas",
+        ]
+    } else {
+        _include_dirs += [
+          # WPA
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto",
+          
+          #wifi manager
+          "${gd32vw55x_sdk_root}/MSDK/wifi_manager",
+        ]
+    }
+
+    if(gd32vw55x_wpas_lib) {
+        defines += [
+          "USE_STDPERIPH_DRIVER",
+          "_TIMEVAL_DEFINED",
+        ]
+    } else {
+        defines += [
+          "USE_STDPERIPH_DRIVER",
+          "_TIMEVAL_DEFINED",
+          "CONFIG_WPA_SUPPLICANT",
+        ]
+    }
+    
+    if (chip_build_libshell) {
+      defines += ["CHIP_LIB_SHELL_ENABLE"]
+    }
+
+    defines += board_defines
+
+    if (chip_build_libshell) {  # matter shell
+      defines += [ "ENABLE_CHIP_SHELL" ]
+    }
+    
+    defines += [ "CFG_RTOS" ]
+    defines += [ "MBEDTLS_CONFIG_FILE=\"rom_config.h\"" ]
+
+    libs += [
+      "${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/MSDK/lib/libble.a",
+      "${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/MSDK/lib/librf.a",
+      "${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/MSDK/lib/libwifi.a",
+      "${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/MSDK/plf/riscv/NMSIS/Library/DSP/GCC/libnmsis_dsp_rv32imafcbp.a",
+      "${gd32vw55x_sdk_build_root}/../riscv_toolchain/nuclei_riscv_newlibc_prebuilt_linux64_2022.04/gcc/riscv-nuclei-elf/lib/rv32imafcbp/ilp32f/libm.a",
+    ]
+    
+    if (gd32vw55x_wpas_lib) {
+        libs += ["${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/MSDK/lib/libwpas.a"]
+    }
+
+    if (defined(invoker.cflags)) {
+      cflags += invoker.cflags
+    }
+    cflags += [
+      "-msmall-data-limit=8",
+      "-mno-save-restore",
+      "-fmessage-length=0",
+      "-fsigned-char",
+      "-Wall",
+      "-Wno-error=unused-function",
+      "-Wno-error=unused-but-set-variable",
+      "-Wno-error=unused-variable",
+      "-Wextra",
+      "-Wno-unused-parameter",
+      "-Wno-sign-compare",
+      "-Wno-shadow",
+      "-Wno-maybe-uninitialized",
+      "-Wno-uninitialized",
+      "-Wno-missing-braces",
+      "-Wno-format-contains-nul",
+      "-Wno-format-extra-args",
+      "-Wno-comments",
+      # "-Wno-enum-conversion",
+
+      # "-Wno-incompatible-pointer-types",
+      "-Wno-type-limits",
+      "-Wno-conversion",
+      "-c",
+      "-mcmodel=medlow",
+      "-ffunction-sections",
+      "-fdata-sections",
+      # "-fno-short-enums",
+      # "-ffat-lto-objects",
+      #" -fno-use-cxa-atexit",
+      "-g",
+    ]
+
+    if (defined(invoker.cflags_cc)) {
+      cflags_cc += invoker.cflags_cc
+    }
+    cflags_cc += [
+      "-msmall-data-limit=8",
+      "-mno-save-restore",
+      "-c",
+      "-mcmodel=medlow",
+      "-march=rv32imafcbp",
+      "-mabi=ilp32f",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-fsigned-char",
+      # "-ffat-lto-objects",
+      # "-fno-short-enums",
+      "-g",
+      "-Wall",
+      "-fno-rtti",
+      "-fno-exceptions",
+      # "-fno-use-cxa-atexit",
+      "-Wno-register",
+    ]
+
+    if (defined(invoker.asmflags)) {
+      asmflags += invoker.asmflags
+    }
+    asmflags += [
+      "-c",
+      "-mcmodel=medlow",
+      "-ffunction-sections",
+      "-fdata-sections",
+     # "-ffat-lto-objects",
+     # "-fno-use-cxa-atexit",
+      "-g",
+      "-Wall",
+    ]
+
+    if (defined(invoker.ldflags)) {
+      ldflags += invoker.ldflags
+    }
+
+    if (is_debug) {
+      cflags += [ "-O${optimize_debug_level}" ]
+      cflags_cc += [ "-O${optimize_debug_level}" ]
+      asmflags += [ "-O${optimize_debug_level}" ]
+      ldflags += [ "-O${optimize_debug_level}" ]
+      
+    } else {
+      cflags += [ "-Os" ]
+      cflags_cc += [ "-Os" ]
+      asmflags += [ "-Os" ]
+      ldflags += [ "-Os" ]
+    }
+
+    ldflags += [
+      # "-march=rv32imafcbp",
+      # "-mabi=ilp32f",
+      "-mcmodel=medlow",
+      "-nostartfiles",
+      "--specs=nano.specs",
+      "--specs=nosys.specs",
+      "-ffunction-sections",
+      "-fdata-sections",
+      # "-ffat-lto-objects",
+      # "-fno-use-cxa-atexit",
+      "-fno-exceptions",
+      "-fno-rtti",
+      "-g",
+      "-Xlinker",
+      "--gc-sections",
+      "-u",
+      "_printf_float",
+      "-Wall",
+      "-Wl,--gc-sections",
+      # "-Wl,--just-symbols=..${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/ROM-EXPORT/symbol/rom_symbol.gcc",
+      "-T..${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/MSDK/plf/riscv/env_Eclipse/gd32vw55x.lds",
+    ]
+
+    if(!gd32vw55x_mbedtls_sw) {
+        ldflags += [ "-Wl,--just-symbols=..${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/ROM-EXPORT/symbol/rom_symbol.gcc" ]
+    }
+
+
+    # cflags += [ "-Wno-format", "-Wno-implicit-fallthrough" ]
+    # cflags_cc += [ "-Wno-format", "-Wno-implicit-fallthrough" ]
+    cflags += [ "-Wno-format-security", "-Wno-implicit-fallthrough" ]
+    cflags_cc += [ "-Wno-format-security", "-Wno-implicit-fallthrough" ]
+
+
+    # cflags_cc += [ "-std=gnu++14" ]
+    # cflags_cc += [ "-std=gnu++17" ]
+
+    # foreach(include_dir, _include_dirs) {
+    #     cflags += [ "-isystem" + rebase_path(include_dir, root_build_dir) ]
+    # }
+
+    include_dirs += _include_dirs
+  }
+
+  # Add sources here
+  source_set(sdk_target_name) {
+    sources = []
+    if (defined(invoker.sources)) {
+      sources += invoker.sources
+    }
+
+    # gd32vw55x peripheral source files
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_adc.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_cau.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_cau_aes.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_cau_des.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_cau_tdes.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_crc.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_dbg.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_dma.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_eclic.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_efuse.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_exti.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_fmc.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_fwdgt.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_gpio.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_hau.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_hau_sha_md5.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_i2c.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_pkcau.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_pmu.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_qspi.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_rcu.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_rtc.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_spi.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_syscfg.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_timer.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_trng.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_usart.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_wwdgt.c",
+
+      "${gd32vw55x_sdk_root}/MSDK/plf/Utilities/gd32vw553h_eval.c",
+    ]
+
+    # gd32vw55x lcd driver files
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/lcd/Soft_Drive/delay_ms.c",
+      "${gd32vw55x_sdk_root}/MSDK/lcd/Soft_Drive/gui.c",
+      "${gd32vw55x_sdk_root}/MSDK/lcd/Soft_Drive/lcd_driver.c",
+      "${gd32vw55x_sdk_root}/MSDK/lcd/lcd_display.c",
+    ]
+
+    # gd32vw55x riscv driver files
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse/entry.S",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse/handlers.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse/init.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse/start.S",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/arch/lib/lib_hook.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/gd32vw55x/gd32vw55x_it.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/gd32vw55x/system_gd32vw55x.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/data_path/plf_data_path.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/dma/dma.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/intc/risc-v/intc.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/la/la_mem_mac.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/nvds/nvds_flash.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/sysctrl/sysctrl.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/time/systime.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/uart/ble_uart.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/uart/console_uart.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/uart/trace_uart.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/uart/uart.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/gd32vw55x_platform.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/init_rom.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/plf_assert.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/trng.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/src/wakelock.c",
+    ]
+
+    #OS
+    sources += [
+      ###riscv
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/croutine.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/event_groups.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/list.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/queue.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/stream_buffer.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/tasks.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/timers.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/portable/Common/tickless_sleep.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS/Source/portable/MemMang/heap_4.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS_port/riscv32/port.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/FreeRTOS_port/riscv32/portasm.S",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/rtos_mgmt/rtos_trace.c",
+      "${gd32vw55x_sdk_root}/MSDK/rtos/rtos_wrapper/wrapper_os.c",
+    ]
+
+    #LWIP
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/port/dhcpd.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/port/sys_arch.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/port/wifi_netif.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/api_lib.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/api_msg.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/err.c",
+      # "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/if_api.c",  ##
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/netbuf.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/netdb.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/netifapi.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/sockets.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/api/tcpip.c",
+      # "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/altcp.c",  ##
+      # "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/altcp_alloc.c",  ##
+      # "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/altcp_tcp.c",  ##
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/def.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/dns.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/inet_chksum.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/init.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ip.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv4/autoip.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv4/dhcp.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv4/etharp.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv4/icmp.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv4/igmp.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv4/ip4.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv4/ip4_addr.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv4/ip4_frag.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/dhcp6.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/ethip6.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/icmp6.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/inet6.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/ip6.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/ip6_addr.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/ip6_frag.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/mld6.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/ipv6/nd6.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/mem.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/memp.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/netif.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/pbuf.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/raw.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/stats.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/sys.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/tcp.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/tcp_in.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/tcp_out.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/timeouts.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/core/udp.c",
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/netif/ethernet.c",
+
+      "${gd32vw55x_sdk_root}/MSDK/lwip/lwip-2.1.2/src/apps/lwiperf/lwiperf.c",
+      
+      #mbedtls port
+      # "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/net_sockets.c",
+    ]
+
+    if(gd32vw55x_mbedtls_sw) {
+        sources += [
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/aes.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/aesni.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/arc4.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/aria.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/asn1parse.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/asn1write.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/base64.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/bignum.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/blowfish.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/camellia.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ccm.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/certs.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/chacha20.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/chachapoly.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/cipher.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/cipher_wrap.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/cmac.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ctr_drbg.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/debug.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/des.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/dhm.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ecdh.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ecdsa.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ecjpake.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ecp.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ecp_curves.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/entropy.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/entropy_poll.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/error.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/gcm.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/havege.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/hkdf.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/hmac_drbg.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/md.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/md2.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/md4.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/md5.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/memory_buffer_alloc.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/nist_kw.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/oid.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/padlock.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/pem.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/pk.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/pk_wrap.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/pkcs11.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/pkcs12.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/pkcs5.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/pkparse.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/pkwrite.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/platform.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/platform_util.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/poly1305.c",
+          # "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/psa_crypto.c",
+          # "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/psa_crypto_driver_wrappers.c",
+          # "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/psa_crypto_se.c",
+          # "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/psa_crypto_slot_management.c",
+          # "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/psa_crypto_storage.c",
+          # "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/psa_its_file.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ripemd160.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/rsa.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/rsa_internal.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/sha1.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/sha256.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/sha512.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_cache.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_ciphersuites.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_cli.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_cookie.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_msg.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_srv.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_ticket.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_tls.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/ssl_tls13_keys.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/threading.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/timing.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/version.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/version_features.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/x509.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/x509_create.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/x509_crl.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/x509_crt.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/x509_csr.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/x509write_crt.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/x509write_csr.c",
+          "${gd32vw55x_sdk_root}/MSDK/Third_Party/mbedtls-2.26.0/library/xtea.c",
+        ]
+    } else {
+    #mbedtls
+    sources += [
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/debug.c",
+          # "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/net_sockets.c",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_cache.c",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_ciphersuites.c",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_cli.c",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_cookie.c",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_default_conf.c",
+          # "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_self_test.c",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_srv.c",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_ticket.c",
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/mbedtls-2.17.0-ssl/library/ssl_tls.c",
+
+          "${gd32vw55x_sdk_root}/MSDK/mbedtls/demo/ssl_client.c",
+        ]
+    }
+
+    #util
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/util/src/aes_ecb.c",
+      "${gd32vw55x_sdk_root}/MSDK/util/src/cJSON.c",
+      "${gd32vw55x_sdk_root}/MSDK/util/src/cyclic_buffer.c",
+      "${gd32vw55x_sdk_root}/MSDK/util/src/debug_print.c",
+      "${gd32vw55x_sdk_root}/MSDK/util/src/dlist.c",
+      "${gd32vw55x_sdk_root}/MSDK/util/src/trace_ext.c",
+      "${gd32vw55x_sdk_root}/MSDK/util/src/util.c",
+    ]
+
+    #wifi
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/wifi_manager/wifi_eloop.c",
+      "${gd32vw55x_sdk_root}/MSDK/wifi_manager/wifi_init.c",
+      "${gd32vw55x_sdk_root}/MSDK/wifi_manager/wifi_management.c",
+      "${gd32vw55x_sdk_root}/MSDK/wifi_manager/wifi_net_ip.c",
+      "${gd32vw55x_sdk_root}/MSDK/wifi_manager/wifi_netlink.c",
+      "${gd32vw55x_sdk_root}/MSDK/wifi_manager/wifi_vif.c",
+      "${gd32vw55x_sdk_root}/MSDK/wifi_manager/wifi_wpa.c",
+    ]
+
+    #ble_app
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/ble_init.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_adapter_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_adv_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_blue_courier_link.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_blue_courier_prot.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_cmd.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_conn_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_dev_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_diss.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_gatt_bqb.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_http_proxy_client.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_http_proxy_server.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_iso_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_l2cap.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_list_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_per_sync_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_prox_monitor.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_prox_rpt.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_scan_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_sec_mgr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/app_virtual_hci.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/app/virtual_hci.c",
+    ]
+
+    #ble_profile
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/dis/ble_diss.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/glp/ble_glps.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/hps/ble_hpsc.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/hps/ble_hpss.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/ias/ble_iass.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/lls/ble_llss.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/prox/ble_proxm.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/prox/ble_proxr.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/sample/ble_sample_cli.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/sample/ble_sample_srv.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/tps/ble_tpss.c",
+      "${gd32vw55x_sdk_root}/MSDK/ble/profile/ble_profile_utils.c",
+    ]
+
+    #app
+    sources += [
+#      "${gd32vw55x_sdk_root}/MSDK/app/atcmd_tcpip.c",
+#      "${gd32vw55x_sdk_root}/MSDK/app/atcmd_wifi.c",
+#      "${gd32vw55x_sdk_root}/MSDK/app/atcmd.c",
+      "${gd32vw55x_sdk_root}/MSDK/app/cmd_shell.c",
+      "${gd32vw55x_sdk_root}/MSDK/app/main.c",
+      "${gd32vw55x_sdk_root}/MSDK/app/ping.c",
+    ]
+
+    if(!gd32vw55x_wpas_lib) {
+        #wpa_supplicant
+         sources += [
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/ap.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ap_config.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ap_drv_ops.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ap_list.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ap_mlme.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/authsrv.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/beacon.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/bss_load.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils/crc32.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ctrl_iface_ap.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/dfs.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/drv_callbacks.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/eap_common/eap_common.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/eap_server/eap_server.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/eap_server/eap_server_identity.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/eap_server/eap_server_methods.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/eap_user_db.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/eapol_auth/eapol_auth_sm.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/hostapd.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/hw_features.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ieee802_11.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ieee802_11_auth.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ieee802_11_he.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ieee802_11_ht.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ieee802_11_shared.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ieee802_11_vht.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/ieee802_1x.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils/ip_addr.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/neighbor_db.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/pmksa_cache_auth.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/rrm.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/sta_info.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/tkip_countermeasures.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/utils.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/wmm.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/wnm_ap.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/wpa_auth.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/wpa_auth_glue.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/ap/wpa_auth_ie.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/aes-internal-dec.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/aes-internal-enc.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/aes-internal.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/aes-omac1.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/aes-unwrap.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/aes-wrap.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/tls/asn1.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils/bitfield.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/bss.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/bssid_ignore.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils/common.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/config.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/config_none.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/crypto_mbedtls.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/ctrl_iface.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/ctrl_iface_gdwifi.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/dh_groups.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/common/dragonfly.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/drivers/driver_common.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/drivers/driver_gdwifi.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/drivers/drivers.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/eap_register.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils/eloop.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/events.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/common/hw_features_common.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/common/ieee802_11_common.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/l2_packet/l2_packet_gdwifi.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/main_gdwifi.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/md5-internal.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/notify.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/op_classes.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils/os_gdwifi.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/rsn_supp/pmksa_cache.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/rsn_supp/preauth.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/random.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/rc4.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/robust_av.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/rrm.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/common/sae.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/scan.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/sha1-internal.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/sha1-pbkdf2.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/sha1-prf.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/sha256-internal.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/sha256-kdf.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/sha256-prf.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/sme.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/tls_none.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/wmm_ac.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/rsn_supp/wpa.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/common/wpa_common.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils/wpa_debug.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/rsn_supp/wpa_ie.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/wpa_md5.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/wpa_sha1.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/crypto/wpa_sha256.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/wpa_supplicant.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/src/utils/wpabuf.c",
+          "${gd32vw55x_sdk_root}/MSDK/wpa_supplicant/wpa_supplicant/wpas_glue.c",
+        ]
+    }
+
+    # zcbor files
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/Third_Party/zcbor-0.6.0/src/zcbor_common.c",
+      "${gd32vw55x_sdk_root}/MSDK/Third_Party/zcbor-0.6.0/src/zcbor_decode.c",
+      "${gd32vw55x_sdk_root}/MSDK/Third_Party/zcbor-0.6.0/src/zcbor_encode.c",
+    ]
+
+    public_deps = []
+    if (defined(invoker.public_deps)) {
+      public_deps += invoker.public_deps
+    }
+
+    # public_deps += [ "${chip_root}/src/lwip:lwip" ]
+    # public_deps += ["${gd32vw55x_sdk_build_root}:mbedtls",]
+
+    # public_configs = [ ":project_configs" ]
+    public_configs = [ ":${sdk_target_name}_config" ]
+
+    if (defined(invoker.public_configs)) {
+      public_configs += invoker.public_configs
+    }
+  }
+}

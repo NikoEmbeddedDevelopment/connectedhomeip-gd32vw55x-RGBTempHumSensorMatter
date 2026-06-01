@@ -1,0 +1,109 @@
+# Copyright (c) 2021 Project CHIP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+import("//build_overrides/chip.gni")
+import("${build_root}/toolchain/flashable_executable.gni")
+
+import("gd32vw55x_board.gni")
+
+template("gd32vw55x_executable") {
+  output_base_name = get_path_info(invoker.output_name, "name")
+
+  objcopy_image_name = output_base_name + ".hex"
+  objcopy_image_format = "ihex"
+  # objcopy = "riscv-none-embed-objcopy"
+
+  riscv_toolcahin_dir = "${chip_root}/third_party/gd32mcu/riscv_toolchain/nuclei_riscv_newlibc_prebuilt_linux64_2022.04/gcc/bin"
+  _tool_name_root_dir = rebase_path(riscv_toolcahin_dir)
+
+  objcopy = "${_tool_name_root_dir}/riscv-nuclei-elf-objcopy"
+
+
+  #Copy flashing dependencies to the output directory so that the output
+  #is collectively self-contained; this allows flashing to work reliably
+  #even if the build and flashing steps take place on different machines
+  #or in different containers.
+
+  # flashing_runtime_target = target_name + ".flashing_runtime"
+  # flashing_script_inputs = [
+  #   "${chip_root}/scripts/flashing/firmware_utils.py",
+  #   # "${chip_root}/scripts/flashing/gd32vw55x_firmware_utils.py",
+  # ]
+
+  # copy(flashing_runtime_target) {
+  #   sources = flashing_script_inputs
+  #   outputs = [ "${root_out_dir}/{{source_file_part}}" ]
+  # }
+
+  # flashing_script_generator =
+  #     "${chip_root}/scripts/flashing/gen_flashing_script.py"
+  # flashing_script_name = output_base_name + ".flash.py"
+  # flashing_options = [
+  #   "gd32vw55x",
+  #   "--device",
+  #   "${gd32vw55x_board}",
+  # ]
+
+  flashable_executable(target_name) {
+    forward_variables_from(invoker, "*")
+    # data_deps = [ ":${flashing_runtime_target}" ]
+  }
+}
+
+template("build_sdk_date_file") {
+  if (defined(invoker.version)) {
+    print(invoker.version)
+  }
+  action(target_name) {
+    deps = []
+    if (defined(invoker.deps)) {
+      deps += invoker.deps
+    }
+    args = []
+    if (defined(invoker.exec_path)) {
+      args += [ "--path=${invoker.exec_path}" ]
+    }
+    if (defined(invoker.enable)) {
+      args += [ "--enable=${invoker.enable}" ]
+    }
+    if (defined(invoker.prebuilts)) {
+      args += [ "--prebuilts=${invoker.prebuilts}" ]
+    }
+    if (defined(invoker.command)) {
+      args += [ "--command=${invoker.command}" ]
+    }
+
+    # external component build log
+    target_dir = rebase_path("${target_out_dir}/build.log")
+    args += [ "--target_dir=${target_dir}" ]
+    # print(target_dir)
+
+    # external component error log if compile failed
+    out_dir = rebase_path("${root_out_dir}/error.log")
+    args += [ "--out_dir=${out_dir}" ]
+    script = "//build_sdk_time_file.py"
+
+    # script = "${chip_root}/examples/lighting-app/gd32mcu/gd32vw55x/build_sdk_time_file.py"
+
+    # script  = "${invoker.script}"
+    # print(script)
+
+    outputs = [ "$target_out_dir/${target_name}_build_sdk_time_file.txt" ]
+
+    # print(outputs)
+  }
+}
+
+

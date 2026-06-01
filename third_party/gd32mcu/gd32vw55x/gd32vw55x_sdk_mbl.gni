@@ -1,0 +1,213 @@
+# Copyright (c) 2021 Project CHIP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/chip.gni")
+import("//build_overrides/gd32vw55x.gni")
+import("//build_overrides/mbedtls.gni")
+import("${chip_root}/src/lib/lib.gni")
+import("${chip_root}/src/platform/device.gni")
+import("gd32vw55x_board.gni")
+
+
+assert(gd32vw55x_sdk_root != "", "gd32vw55x_sdk_root must be specified")
+
+# Defines an gd32vw55x SDK MBL build target.
+#
+# Parameters:
+#   sources - The sources files to build.
+#
+template("gd32vw55x_sdk_mbl") {
+  if (defined(invoker.gd32vw55x_sdk_root)) {
+    gd32vw55x_sdk_root = invoker.gd32vw55x_sdk_root
+  }
+
+  assert(gd32vw55x_sdk_root != "", "gd32vw55x_sdk_root must be specified")
+
+  if (defined(invoker.gd32vw55x_project_dir)) {
+    gd32vw55x_project_dir = invoker.gd32vw55x_project_dir
+  }
+
+  sdk_target_name = target_name
+
+  # While most gd32vw55x sdk includes come from the gd32vw55x_sdk_config config (in
+  # BUILD.gn), this template gets instantiated by each project each of which
+  # provides a few extra includes/defines. Handle those here.
+  # config("project_configs") {
+  config("${sdk_target_name}_config") {
+    include_dirs = []
+    defines = []
+    libs = []
+    cflags = []
+    cflags_cc = []
+    asmflags = []
+    ldflags = []
+    libs = []
+
+    if (defined(invoker.include_dirs)) {
+      include_dirs += invoker.include_dirs
+    }
+    include_dirs += [ "${gd32vw55x_project_dir}/include" ]
+
+    if (defined(invoker.defines)) {
+      defines += invoker.defines
+    }
+
+  include_dirs += [
+      # firmware inc
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Include",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/gd32vw55x",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/NMSIS/Core/Include",
+      "${gd32vw55x_sdk_root}/MSDK/macsw/export",
+
+      # ROM-EXPORT
+      "${gd32vw55x_sdk_root}/ROM-EXPORT/bootloader",
+      "${gd32vw55x_sdk_root}/ROM-EXPORT/halcomm",
+      "${gd32vw55x_sdk_root}/ROM-EXPORT/mbedtls-2.17.0-rom/include",
+
+     # config
+      "${gd32vw55x_sdk_root}/config",
+
+     # mainboot
+      "${gd32vw55x_sdk_root}/MBL/mainboot",
+      
+      "${gd32vw55x_sdk_root}/MSDK/app",
+    ]
+
+
+#    defines += [
+#      "USE_STDPERIPH_DRIVER",
+#      "CFG_VIRTEX7",
+#    ]
+
+    defines += board_defines
+
+   # if (defined(invoker.cflags)) {
+   #   cflags += invoker.cflags
+   # }
+
+    cflags += [
+    #  "-D CFG_VIRTEX7",
+      "-D EXEC_USING_STD_PRINTF",
+      "-msmall-data-limit=8",
+      "-mno-save-restore",
+      "-fno-common",
+    #  "-fmessage-length=0",
+    #  "-fsigned-char",
+      "-Wno-comments",
+      "-Wno-enum-conversion",
+      "-g",
+      "-Wall",
+      "-std=gnu11",
+      "-c",
+      "-mcmodel=medlow",
+      "-ffunction-sections",
+      "-fdata-sections",
+    ]
+
+   # if (defined(invoker.asmflags)) {
+   #   asmflags += invoker.asmflags
+   # }
+    asmflags += [
+      "-c",
+      "-g",
+      "-mcmodel=medlow",
+      "-msmall-data-limit=8",
+      "-mno-save-restore",
+    #  "-fmessage-length=0",
+    #  "-fsigned-char",
+     "-ffunction-sections",
+     "-fdata-sections",
+      "-x",
+      "assembler-with-cpp",
+    ]
+
+   # if (defined(invoker.ldflags)) {
+   #   ldflags += invoker.ldflags
+   # }
+
+    if (is_debug) {
+      cflags += [ "-O0" ]
+      asmflags += [ "-O0" ]
+      ldflags +=  [ "-O0" ]
+    } else {
+      cflags += [ "-O2" ]
+      asmflags += [ "-O2" ]
+      ldflags +=  [ "-O2" ]
+    }
+
+    ldflags += [
+      "-mcmodel=medlow",
+      "-nostartfiles",
+      "-mno-save-restore",
+      "-msmall-data-limit=8",
+      "--specs=nano.specs",
+      "--specs=nosys.specs",
+      "-ffunction-sections",
+      "-fdata-sections",
+      "-fno-common",
+      "-Xlinker",
+      "-g",
+      "-Wall",
+      "-Wl,--gc-sections",
+      "-Wl,--just-symbols=..${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/ROM-EXPORT/symbol/rom_symbol.gcc",
+      "-T..${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/MBL/project/eclipse/mbl.lds",
+    ]
+  }
+
+  # Add sources here
+  source_set(sdk_target_name) {
+    sources = []
+    if (defined(invoker.sources)) {
+      sources += invoker.sources
+    }
+
+    # gd32vw55x peripheral source files
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_eclic.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_exti.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_fmc.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_gpio.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_rcu.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/GD32VW55x_standard_peripheral/Source/gd32vw55x_usart.c",
+    ]
+
+    # gd32vw55x riscv driver files
+    sources += [
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse/entry.S",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse/handlers.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse/init.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/env_Eclipse/start.S",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/arch/lib/lib_hook_mbl.c",
+      "${gd32vw55x_sdk_root}/MSDK/plf/riscv/gd32vw55x/system_gd32vw55x.c",
+    ]
+
+    # mbl
+    sources += [
+      "${gd32vw55x_sdk_root}/MBL/mainboot/mbl.c",
+      "${gd32vw55x_sdk_root}/MBL/mainboot/mbl_image_validate.c",
+    ]
+
+    public_deps = []
+    if (defined(invoker.public_deps)) {
+     # public_deps += invoker.public_deps
+    }
+
+    public_configs = [ ":${sdk_target_name}_config" ]
+
+    if (defined(invoker.public_configs)) {
+      # public_configs += invoker.public_configs
+    }
+  }
+}
