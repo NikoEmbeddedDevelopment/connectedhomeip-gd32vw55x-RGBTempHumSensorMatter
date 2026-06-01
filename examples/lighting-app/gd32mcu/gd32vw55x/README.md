@@ -59,20 +59,42 @@ In this firmware the sensor is polled every **1 second** (`SENSOR_POLL_INTERVAL_
 Temperature is reported in units of **0.01 °C** and humidity in **0.01 %RH** as
 required by the Matter specification.
 
-### WS2812 Environment LED Strip
+### WS2812B LED Strips (×2)
 
-A strip of **10 WS2812B** addressable RGB LEDs visualises the current environment:
+This firmware drives **two independent WS2812B strips** of 10 LEDs each:
+
+#### Strip 1 — Light Strip (Matter-controlled)
+
+| Property | Value |
+|----------|-------|
+| GPIO | **PA4** (AF8) |
+| Timer | TIMER0, CH1 |
+| DMA | DMA_CH6 (SUBPERI0) |
+| Driver | `ws2812b.c` / `ws2812b_set_rgb()` |
+| Control | Matter OnOff / LevelControl / ColorControl clusters |
+
+This strip reflects the Matter lighting state: hue, saturation, and brightness are
+set directly by the Matter controller via cluster commands.
+
+#### Strip 2 — Environment LED Strip (sensor-driven)
+
+| Property | Value |
+|----------|-------|
+| GPIO | **PB2** (AF3) |
+| Timer | TIMER2, CH3 |
+| DMA | DMA_CH3 (SUBPERI2) |
+| Driver | `SensorManager.cpp` `EnvLed_UpdateFromMeasurement()` |
+| Control | Automatic — updated every sensor poll (1 s) |
+
+Colour encodes temperature, brightness encodes humidity:
 
 | Measurement | LED behaviour |
 |-------------|---------------|
 | Temperature ≤ 20 °C | Blue |
 | Temperature = 25 °C | Green |
-| Temperature ≥ 30 °C | Red (interpolated between colours) |
-| Humidity ≤ 40 %RH | Dim (low brightness) |
-| Humidity ≥ 75 %RH | Full brightness (interpolated) |
-
-The strip is driven by **TIMER2 CH3 PWM + DMA CH3** for a CPU-free bit-banging
-approach on GPIO **PB2** (AF3).
+| Temperature ≥ 30 °C | Red (linearly interpolated) |
+| Humidity ≤ 40 %RH | Dim (5 % brightness) |
+| Humidity ≥ 75 %RH | Full brightness (100 %) |
 
 ---
 
@@ -97,24 +119,25 @@ ADDR              GND              Sets I2C address to 0x44
                     ┌──────────────────────┐
                     │   GD32VW553H-EVAL    │
                     │                      │
-GD30TSHT30          │  PA2 ─── SCL         │
-  ┌───────┐   SCL ──┤  PA3 ─── SDA         │
-  │  VDD  ├─ 3.3V   │                      │
-  │  GND  ├─ GND    │  3.3V ─── VDD        │
-  │  SCL  ├─────────┤  GND  ─── GND/ADDR   │
-  │  SDA  ├─────────┤                      │
-  │  ADDR ├─ GND    │  PB2 ─── DIN         │
-  └───────┘         └──────────────────────┘
-                             │
-                             │ PB2 (AF3)
-                             ▼
-                    WS2812B LED Strip
-                    ┌────┬────┬────┬────┐
-                    │LED1│LED2│ …  │LED10│
-                    └────┴────┴────┴────┘
-                     DIN connected to PB2
-                     VCC → 5 V (external supply recommended)
-                     GND → common GND
+GD30TSHT30          │  PA2 ──── SCL        │
+  ┌───────┐         │  PA3 ──── SDA        │
+  │  VDD  ├─ 3.3V  │                      │
+  │  GND  ├─ GND   │  PA4 ──────────────────────► Strip 1 DIN (Light)
+  │  SCL  ├────────┤  PA2                  │
+  │  SDA  ├────────┤  PA3                  │
+  │  ADDR ├─ GND   │                      │
+  └───────┘        │  PB2 ──────────────────────► Strip 2 DIN (EnvLED)
+                   └──────────────────────┘
+
+Strip 1 — Light (PA4, TIMER0/CH1, DMA_CH6):
+  ┌────┬────┬────┬─────┐
+  │LED1│LED2│ …  │LED10│  DIN ← PA4
+  └────┴────┴────┴─────┘  VCC → 5 V,  GND → GND
+
+Strip 2 — Environment (PB2, TIMER2/CH3, DMA_CH3):
+  ┌────┬────┬────┬─────┐
+  │LED1│LED2│ …  │LED10│  DIN ← PB2
+  └────┴────┴────┴─────┘  VCC → 5 V,  GND → GND
 ```
 
 ### On-board LEDs and Buttons
