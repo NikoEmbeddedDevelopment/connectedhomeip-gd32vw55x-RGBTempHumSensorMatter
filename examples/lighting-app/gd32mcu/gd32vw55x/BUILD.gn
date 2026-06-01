@@ -1,0 +1,180 @@
+# Copyright (c) 2021 Project CHIP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+import("//build_overrides/chip.gni")
+import("//build_overrides/gd32vw55x.gni")
+
+import("${build_root}/config/defaults.gni")
+import("${chip_root}/src/platform/device.gni")
+import("${gd32vw55x_sdk_build_root}/gd32vw55x_executable.gni")
+import("${gd32vw55x_sdk_build_root}/gd32vw55x_sdk.gni")
+import("${gd32vw55x_sdk_build_root}/gd32vw55x_sdk_mbl.gni")
+
+assert(current_os == "freertos")
+
+gd32vw55x_project_dir = "${chip_root}/examples/lighting-app/gd32mcu/gd32vw55x"
+examples_plat_dir = "${chip_root}/examples/platform/gd32mcu/gd32vw55x"
+
+declare_args() {
+  # Dump memory usage at link time.
+  chip_print_memory_usage = true
+
+  # PIN code for PASE session establishment.
+  setup_pin_code = 20202021
+
+  setupdiscriminator = 3840
+
+  # Monitor & log memory usage at runtime.
+  enable_heap_monitoring = false
+
+  # Build update app
+  build_update_image = false
+
+  #  nuclei_toolchain = true
+}
+
+show_qr_code = false
+
+gd32vw55x_sdk_mbl("sdk_mbl") {
+  include_dirs = []
+  defines = [ "BOARD_ID=${gd32vw55x_board}" ]
+  sources = []
+}
+
+gd32vw55x_sdk("sdk") {
+  include_dirs = [
+    "${chip_root}/src/platform/gd32mcu/gd32vw55x",
+    "${gd32vw55x_project_dir}/include",
+    "${examples_plat_dir}",
+  ]
+
+  defines = [
+    "BOARD_ID=${gd32vw55x_board}",
+    "GD32VW55X_LOG_ENABLED=1",
+    "CHIP_DEVICE_CONFIG_USE_TEST_SETUP_PIN_CODE=${setup_pin_code}",
+    "CHIP_DEVICE_CONFIG_USE_TEST_SETUP_DISCRIMINATOR=${setupdiscriminator}",
+  ]
+
+  sources = [ "${gd32vw55x_project_dir}/include/CHIPProjectConfig.h" ]
+
+  if (chip_enable_ota_requestor) {
+    public_configs += [ ":gd32vw55x_ota_config" ]
+  }
+}
+
+gd32vw55x_executable("gd32vw55x_mbl") {
+  include_dirs = []
+  sources = []
+  defines = []
+  ldflags = []
+
+  output_name = "gd32vw55x_mbl.elf"
+
+  deps = [ ":sdk_mbl" ]
+
+  if (chip_print_memory_usage) {
+    ldflags += [
+      "-Wl,--print-memory-usage",
+      "-fstack-usage",
+    ]
+  }
+
+  output_dir = root_out_dir
+}
+
+gd32vw55x_executable("lighting_app") {
+  include_dirs = []
+  defines = []
+  ldflags = []
+
+  output_name = "chip-gd32vw55x-lighting-example.elf"
+
+  sources = [
+    "${examples_plat_dir}/LCDDisplay.cpp",
+    "${examples_plat_dir}/LEDWidget.cpp",
+    "${examples_plat_dir}/QRCodeScreen.cpp",
+    "${examples_plat_dir}/init_gd32vw55xPlatform.cpp",
+    "${examples_plat_dir}/matter_cmd_shell.c",
+    "${examples_plat_dir}/syscalls_stubs.cpp",
+    "src/AppTask.cpp",
+    "src/ButtonHandler.cpp",
+    "src/SensorManager.cpp",  # <<< ADD: compile & link SensorManager
+    "src/ZclCallbacks.cpp",
+    "src/gd32vw55x_global.cpp",
+    "src/main.cpp",
+    "src/matter_shell.cpp",
+  ]
+
+  include_dirs += [
+    "include",
+    "${examples_plat_dir}",
+    "${gd32vw55x_project_dir}/include",
+  ]
+
+  if (show_qr_code) {
+    sources += [ "${examples_plat_dir}/display/lcd.c" ]
+    defines += [ "DISPLAY_ENABLED" ]
+  }
+
+  deps = [
+    ":sdk",
+    "${chip_root}/examples/common/QRCode",
+    "${chip_root}/examples/lighting-app/lighting-common",
+    "${chip_root}/examples/lighting-app/lighting-common:lighting-manager",
+    "${chip_root}/examples/providers:device_info_provider_please_do_not_reuse_as_is",
+    "${chip_root}/src/lib",
+    "${chip_root}/src/setup_payload",
+  ]
+
+  defines = []
+
+  if (enable_heap_monitoring) {
+    sources += [ "${examples_plat_dir}/MemMonitoring.cpp" ]
+    defines += [ "HEAP_MONITORING" ]
+  }
+
+  gd32vw55x_lib =
+      "${gd32vw55x_sdk_build_root}/GD32VW55x_RELEASE_V1.0.0/MSDK/lib/"
+  ldflags += [ "-L" + rebase_path(gd32vw55x_lib, root_build_dir) +
+               "-lble -lrf -lwifi" ]
+
+  if (chip_print_memory_usage) {
+    ldflags += [
+      "-Wl,--print-memory-usage",
+      "-fstack-usage",
+    ]
+  }
+
+  public_deps = [ "${gd32vw55x_sdk_build_root}:gd32vw55x_sdk" ]
+
+  output_dir = root_out_dir
+}
+
+build_sdk_date_file("lighting_app_time") {
+  exec_path = rebase_path(".", root_build_dir)
+  outdir = rebase_path("$root_out_dir")
+  command = "./build_time.sh ${outdir}"
+}
+
+group("gd32vw55x") {
+  deps = []
+  deps += [ ":lighting_app" ]
+  deps += [ ":gd32vw55x_mbl" ]
+  deps += [ ":lighting_app_time" ]
+}
+
+group("default") {
+  deps = [ ":gd32vw55x" ]
+}
